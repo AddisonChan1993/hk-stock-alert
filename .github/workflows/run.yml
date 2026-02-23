@@ -1,0 +1,31 @@
+name: StockAlert
+
+on:
+  schedule:
+    # 港股交易時段：週一至五
+    # UTC 01:30 = 香港 09:30 (開市)
+    # UTC 05:00 = 香港 13:00 (午市開市)
+    # UTC 08:15 = 香港 16:15 (收市總結)
+    - cron: '30 1 * * 1-5'
+    - cron: '0 5 * * 1-5'
+    - cron: '15 8 * * 1-5'
+  workflow_dispatch: # 容許你隨時喺網頁手動撳掣執行
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas pandas_ta requests
+
+      - name: Run Analysis
+        run: python monitor.py
