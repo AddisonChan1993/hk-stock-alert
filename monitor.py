@@ -3,8 +3,10 @@ import pandas as pd
 import requests
 import os
 
-TOKEN = "8713539312:AAGTPQ-MhzvRRfL-XpaZPxs8Hyo9MlWfWcw"
-CHAT_ID = "6248100698"
+# 💡 改為從環境變數讀取，對應返 Secrets
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
 STOCKS = ['1810.HK', '3750.HK', '9611.HK', '2561.HK', '2050.HK', '0005.HK', '1299.HK']
 
 def send_tg(msg):
