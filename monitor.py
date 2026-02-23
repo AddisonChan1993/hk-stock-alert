@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 import os
 
-# 從環境變數讀取安全資訊
+# 💡 從環境變數讀取安全資訊
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -14,44 +14,52 @@ def send_tg(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}&parse_mode=Markdown"
     requests.get(url)
 
-def analyze_stock(symbol):
-    try:
-        # 抓取 2 個月數據以確保指標準確
-        df = yf.download(symbol, period='2mo', interval='1d', progress=False)
-        if df.empty or len(df) < 20: return None
-        
-        # --- 手動計指標 (避開版本衝突) ---
-        # 1. RSI (14)
-        delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['RSI'] = 100 - (100 / (1 + rs))
-        
-        # 2. MACD (12, 26, 9)
-        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-        df['MACD'] = exp1 - exp2
-        
-        last_row = df.iloc[-1]
-        price = float(last_row['Close'])
-        rsi = float(last_row['RSI'])
-        macd = float(last_row['MACD'])
-        
-        # --- 最初代碼嘅 AI 評分邏輯 ---
-        score = 0
-        if rsi < 35: score += 35      # 底部反彈訊號
-        if macd > 0: score += 25      # 趨勢向上
-        if rsi > 68: score -= 30      # 超買風險
-        
-        # 針對 1810 小米嘅特別加權
-        if symbol == '1810.HK' and rsi > 70:
-            status = "⚠️ 獲利回吐風險極高"
-        elif score > 20:
-            status = "🚀 大升機率高 (動能強)"
-        elif score < -10:
-            status = "📉 走勢轉弱 (建議避險)"
-        else:
-            status = "⚖️ 區間盤整"
+def ai_prediction_logic(df):
+    """呢度係你最初代碼嘅 AI 預測邏輯簡化版"""
+    # 計算 RSI
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    # 計算 MACD
+    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+    macd = exp1 - exp2
+    
+    last_rsi = float(rsi.iloc[-1])
+    last_macd = float(macd.iloc[-1])
+    
+    # 最初 AI 代碼嘅評分系統
+    score = 0
+    if last_rsi < 35: score += 35      # 底部反彈訊號
+    if last_macd > 0: score += 25      # 趨勢向上
+    if last_rsi > 68: score -= 30      # 超買風險
+    
+    if score > 20: return "🚀 大升機率高", last_rsi
+    elif score < -10: return "📉 走勢轉弱", last_rsi
+    else: return "⚖️ 區間盤整", last_rsi
+
+def monitor():
+    report = "📊 *最初 AI 邏輯 - 雲端掃描報告*\n"
+    for symbol in STOCKS:
+        try:
+            df = yf.download(symbol, period='2mo', interval='1d', progress=False)
+            if df.empty: continue
             
-        return f"*{symbol}*\n現價: `${price:.2f}`\n訊號: {status}\nRSI: {rsi:.1f} | MACD:
+            price = float(df['Close'].iloc[-1])
+            prediction, rsi = ai_prediction_logic(df)
+            
+            # 針對 1810 嘅獲利保護邏輯
+            if symbol == '1810.HK' and rsi > 70:
+                prediction = "⚠️ 獲利回吐風險 (RSI超買)"
+            
+            report += f"\n*{symbol}*\n現價: `${price:.2f}`\nAI 預測: {prediction}\nRSI: {rsi:.1f}\n"
+        except Exception as e:
+            print(f"Error analyzing {symbol}: {e}")
+            
+    send_tg(report)
+
+if __name__ == "__main__":
+    monitor()
