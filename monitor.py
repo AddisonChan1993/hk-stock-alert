@@ -3,19 +3,27 @@ import pandas as pd
 import requests
 import os
 
-# 💡 從環境變數讀取安全資訊
+# 從環境變數讀取安全資訊
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-# 你持有的 7 隻股票
-STOCKS = ['1810.HK', '3750.HK', '9611.HK', '2561.HK', '2050.HK', '0005.HK', '1299.HK']
+# 設定持股對照表：代碼與中文名稱
+STOCK_MAP = {
+    '1810.HK': '小米集團',
+    '3750.HK': '寧德時代',
+    '9611.HK': '龍旗科技',
+    '2561.HK': '維昇藥業',
+    '2050.HK': '三花智控',
+    '0005.HK': '匯豐控股',
+    '1299.HK': '友邦保險'
+}
 
 def send_tg(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}&parse_mode=Markdown"
     requests.get(url)
 
 def ai_prediction_logic(df):
-    """呢度係你最初代碼嘅 AI 預測邏輯簡化版"""
+    """最初 AI 邏輯的技術指標權重評分系統"""
     # 計算 RSI
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -31,9 +39,9 @@ def ai_prediction_logic(df):
     last_rsi = float(rsi.iloc[-1])
     last_macd = float(macd.iloc[-1])
     
-    # 最初 AI 代碼嘅評分系統
+    # AI 評分系統邏輯
     score = 0
-    if last_rsi < 35: score += 35      # 底部反彈訊號
+    if last_rsi < 35: score += 35      # 底部超賣
     if last_macd > 0: score += 25      # 趨勢向上
     if last_rsi > 68: score -= 30      # 超買風險
     
@@ -42,20 +50,22 @@ def ai_prediction_logic(df):
     else: return "⚖️ 區間盤整", last_rsi
 
 def monitor():
-    report = "📊 *最初 AI 邏輯 - 雲端掃描報告*\n"
-    for symbol in STOCKS:
+    report = "📊 *最初 AI 邏輯 - 雲端持倉報告*\n"
+    for symbol, name in STOCK_MAP.items():
         try:
+            # 抓取數據
             df = yf.download(symbol, period='2mo', interval='1d', progress=False)
             if df.empty: continue
             
             price = float(df['Close'].iloc[-1])
             prediction, rsi = ai_prediction_logic(df)
             
-            # 針對 1810 嘅獲利保護邏輯
+            # 針對 1810 小米獲利保護邏輯
             if symbol == '1810.HK' and rsi > 70:
                 prediction = "⚠️ 獲利回吐風險 (RSI超買)"
             
-            report += f"\n*{symbol}*\n現價: `${price:.2f}`\nAI 預測: {prediction}\nRSI: {rsi:.1f}\n"
+            # 組合報告內容
+            report += f"\n*{name} ({symbol})*\n現價: `${price:.2f}`\nAI 預測: {prediction}\nRSI: {rsi:.1f}\n"
         except Exception as e:
             print(f"Error analyzing {symbol}: {e}")
             
