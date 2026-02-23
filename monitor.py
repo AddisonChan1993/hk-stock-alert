@@ -2,13 +2,9 @@ import yfinance as yf
 import pandas as pd
 import requests
 import os
-import pandas_ta as ta
 
-# 填入你提供的資訊
 TOKEN = "8713539312:AAGTPQ-MhzvRRfL-XpaZPxs8Hyo9MlWfWcw"
 CHAT_ID = "6248100698"
-
-# 你持有的 7 隻股票
 STOCKS = ['1810.HK', '3750.HK', '9611.HK', '2561.HK', '2050.HK', '0005.HK', '1299.HK']
 
 def send_tg(msg):
@@ -16,35 +12,42 @@ def send_tg(msg):
     requests.get(url)
 
 def analyze_stock(symbol):
-    df = yf.download(symbol, period='1mo', interval='1d')
-    if df.empty: return
+    df = yf.download(symbol, period='2mo', interval='1d')
+    if df.empty or len(df) < 20: return
     
-    # 計算技術指標
-    df.ta.rsi(length=14, append=True)
-    df.ta.macd(append=True)
+    # 手動計算 RSI (14)
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # 手動計算 MACD
+    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp1 - exp2
     
     last_row = df.iloc[-1]
-    rsi = last_row['RSI_14']
-    macd = last_row['MACD_12_26_9']
-    price = last_row['Close']
+    rsi = float(last_row['RSI'])
+    macd = float(last_row['MACD'])
+    price = float(last_row['Close'])
     
-    # 簡易 AI 邏輯評分 (模擬 XGBoost 決策)
+    # 針對你持倉的 AI 診斷邏輯
     score = 0
-    if rsi < 30: score += 30  # 超賣反彈機率高
-    if macd > 0: score += 20  # 趨勢向上
-    if rsi > 70: score -= 20  # 超買風險
+    if rsi < 35: score += 30  # 超賣反彈
+    if macd > 0: score += 20  # 趨勢轉強
+    if rsi > 65: score -= 25  # 小心超買回調
     
-    # 判斷訊號
-    signal = "⚖️ 盤整"
+    signal = "⚖️ 盤整中"
     if score > 20: signal = "🚀 大升機率高"
-    elif score < -10: signal = "⚠️ 大跌風險"
+    elif score < -10: signal = "⚠️ 注意大跌風險"
     
-    return f"*{symbol}* 現價: ${price:.2f}\n訊號: {signal}\nRSI: {rsi:.1f}"
+    return f"*{symbol}*\n現價: `${price:.2f}`\n訊號: {signal}\nRSI: {rsi:.1f}"
 
-# 執行監控
-report = "📊 *AI 每日持倉掃描報告*\n\n"
+# 執行並發送報告
+report = "📊 *AI 每日持倉掃描報告*\n"
 for s in STOCKS:
     res = analyze_stock(s)
-    if res: report += res + "\n\n"
+    if res: report += "\n" + res + "\n"
 
 send_tg(report)
