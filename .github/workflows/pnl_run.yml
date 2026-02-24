@@ -1,0 +1,30 @@
+name: DailyPnL
+
+on:
+  schedule:
+    - cron: '20 8 * * 1-5'  # 🇭🇰 逢星期一至五，香港時間 16:20 執行
+  workflow_dispatch:        # 畀你隨時手動撳掣測試
+  push:
+    paths:
+      - 'pnl.py'            # 只有當你修改 pnl.py 時先會自動 Run 一次測試
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+
+      - name: Run PnL Calculation
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python pnl.py
