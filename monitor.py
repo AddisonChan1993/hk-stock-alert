@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 import os
 
-# 從環境變數讀取安全資訊
+# 💡 必須改為咁樣，唔好直接寫粒 Token 入去
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
