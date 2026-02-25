@@ -24,52 +24,110 @@ STOCK_MAP = {
 
 def ai_prediction_logic(df):
     try:
-        # 【核心修復】強制將數據轉為 1D 陣列，解決格式兼容問題
         close = df['Close'].squeeze()
         volume = df['Volume'].squeeze()
+        price = float(close.iloc[-1])
         
-        # 1. RSI 計算 (加入除以零保護)
+        # --- 1. 原有指標 (RSI, 均線, 成交量) ---
         delta = close.diff()
         gain = delta.clip(lower=0).rolling(window=14).mean()
         loss = -delta.clip(upper=0).rolling(window=14).mean()
-        
-        # 防止 loss 為 0 導致無限大錯誤
         loss = loss.replace(0, 0.0001)
-        rs = gain / loss
-        rsi = float(100 - (100 / (1 + rs)).iloc[-1])
+        rsi = float(100 - (100 / (1 + (gain / loss))).iloc[-1])
         
-        # 2. 均線計算
         ma5 = float(close.rolling(window=5).mean().iloc[-1])
         ma20 = float(close.rolling(window=20).mean().iloc[-1])
         
-        # 3. 成交量計算 (加入除以零保護)
         vol_ma5 = float(volume.rolling(window=5).mean().iloc[-1])
         last_vol = float(volume.iloc[-1])
+        vol_ratio = float(last_vol / vol_ma5) if vol_ma5 > 0 else 1.0
         
-        if vol_ma5 <= 0:
-            vol_ratio = 1.0
-        else:
-            vol_ratio = float(last_vol / vol_ma5)
+        # --- 2. 新增：MACD (判斷動能轉勢) ---
+        exp1 = close.ewm(span=12, adjust=False).mean()
+        exp2 = close.ewm(span=26, adjust=False).mean()
+        macd = exp1 - exp2
+        signal = macd.ewm(span=9, adjust=False).mean()
+        
+        macd_today = macd.iloc[-1]
+        signal_today = signal.iloc[-1]
+        macd_ytd = macd.iloc[-2]
+        signal_ytd = signal.iloc[-2]
+        
+        macd_cross = ""
+        # 尋找黃金交叉 / 死亡交叉
+        if macd_today > signal_today and macd_ytd <= signal_ytd:
+            macd_cross = "金叉"
+        elif macd_today < signal_today and macd_ytd >= signal_ytd:
+            macd_cross = "死叉"
             
-        price = float(close.iloc[-1])
+        # --- 3. 新增：布林帶 Bollinger Bands (判斷頂底) ---
+        std20 = close.rolling(window=20).std().iloc[-1]
+        upper_band = ma20 + (std20 * 2)
+        lower_band = ma20 - (std20 * 2)
         
-        # --- 高精度評分邏輯 ---
+        bb_status = ""
+        if price >= upper_band: bb_status = "頂"
+        elif price <= lower_band: bb_status = "底"
+            
+        # --- 👑 終極高精度綜合評分系統 ---
         score = 0
-        if price > ma5 and ma5 > ma20: score += 40
-        if price < ma5 and ma5 < ma20: score -= 40
-        if 40 < rsi < 65: score += 20
-        if rsi > 75: score -= 30
-        if vol_ratio > 1.4 and price > ma5: score += 20
+        tags = [] # 用來收集特別訊號，顯示喺 Telegram
         
+        # 基本趨勢分
+        if price > ma5 and ma5 > ma20: score += 20
+        if price < ma5 and ma5 < ma20: score -= 20
+        
+        # RSI 狀態
+        if 40 < rsi < 65: score += 10
+        if rsi >= 75: 
+            score -= 20
+            tags.append("超買")
+        elif rsi <= 30:
+            score += 20
+            tags.append("超賣")
+            
+        # 成交量狀態
+        if vol_ratio > 1.5 and price > ma5: 
+            score += 20
+            tags.append("放量")
+            
+        # MACD 加成
+        if macd_cross == "金叉":
+            score += 30
+            tags.append("🌟MACD金叉")
+        elif macd_cross == "死叉":
+            score -= 30
+            tags.append("💀MACD死叉")
+        elif macd_today > signal_today:
+            score += 10 # 處於多頭區間
+            
+        # 布林帶極端訊號加成
+        if bb_status == "頂":
+            if rsi > 70:
+                score -= 30 
+                tags.append("⚠️觸頂回落風險")
+            elif vol_ratio > 1.5:
+                score += 20
+                tags.append("🔥強勢破上軌")
+        elif bb_status == "底":
+            if rsi < 30:
+                score += 30
+                tags.append("🎯觸底反彈區")
+        
+        # 決定最終評級
         if score >= 50: res = "🚀 強力買入"
-        elif score >= 15: res = "⬆️ 趨勢向好"
-        elif score <= -30: res = "🚨 轉向跌勢"
+        elif score >= 20: res = "⬆️ 趨勢向好"
+        elif score <= -30: res = "🚨 強烈警告/轉勢"
+        elif score <= -10: res = "⬇️ 走勢偏弱"
         else: res = "⚖️ 區間盤整"
         
+        # 將 Tags 組合顯示
+        if tags:
+            res += f" [{', '.join(tags)}]"
+            
         return res, rsi, vol_ratio
         
     except Exception as e:
-        # 💡 如果再錯，會直接顯示錯誤原因，唔會再收收埋埋
         return f"⚠️ 運算錯誤 ({str(e)[:10]})", 50.0, 1.0
 
 def send_tg(msg):
