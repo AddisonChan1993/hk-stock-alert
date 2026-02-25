@@ -1,12 +1,11 @@
 name: DailyPnL
 
 on:
-  schedule:
-    - cron: '20 8 * * 1-5'  # 🇭🇰 逢星期一至五，香港時間 16:20 執行
-  workflow_dispatch:        # 畀你隨時手動撳掣測試
+  repository_dispatch:
+    types: [run_pnl]        # 👈 盈虧專用密碼
+  workflow_dispatch:
   push:
-    paths:
-      - 'pnl.py'            # 只有當你修改 pnl.py 時先會自動 Run 一次測試
+    branches: [ main ]
 
 jobs:
   run:
