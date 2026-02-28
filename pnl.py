@@ -8,12 +8,12 @@ CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 # 📊 你的專屬持倉名單 (記得改 shares 股數！)
 PORTFOLIO = {
-    '3466.HK': {'name': '恒生高息股', 'buy_price': 20.163, 'shares': 2800},
-    '0005.HK': {'name': '滙豐控股', 'buy_price': 124.300, 'shares': 400},
-    '3070.HK': {'name': '平安香港高息', 'buy_price': 40.010, 'shares': 800},
-    '3081.HK': {'name': '價值黃金ETF', 'buy_price': 23.540, 'shares': 1000},
-    '1088.HK': {'name': '中國神華', 'buy_price': 43.900, 'shares': 500},
-    '1299.HK': {'name': '友邦保險', 'buy_price': 85.450, 'shares': 200},
+    '0005.HK': {'shares': 400, 'avg_price': 124.300},  # 匯豐控股
+    '1088.HK': {'shares': 500, 'avg_price': 43.900},   # 中國神華
+    '1299.HK': {'shares': 200, 'avg_price': 85.450},   # 友邦保險
+    '3070.HK': {'shares': 1100, 'avg_price': 40.078},  # 平安香港高息
+    '3081.HK': {'shares': 1100, 'avg_price': 23.625},  # 價值黃金ETF
+    '3466.HK': {'shares': 2800, 'avg_price': 20.163}   # 恒生高息股
 }
 
 def send_tg(msg):
