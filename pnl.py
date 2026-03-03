@@ -9,10 +9,9 @@ import yfinance as yf
 PORTFOLIO = {
     '0005.HK': {'name': '匯豐控股', 'shares': 400, 'avg_price': 124.300},
     '1088.HK': {'name': '中國神華', 'shares': 500, 'avg_price': 43.900},
-    '1299.HK': {'name': '友邦保險', 'shares': 200, 'avg_price': 85.450},
     '3070.HK': {'name': '平安香港高息', 'shares': 1100, 'avg_price': 40.078},
     '3081.HK': {'name': '價值黃金ETF', 'shares': 1100, 'avg_price': 23.625},
-    '3466.HK': {'name': '恒生高息股', 'shares': 2800, 'avg_price': 20.163}
+    '3466.HK': {'name': '恒生高息股', 'shares': 3200, 'avg_price': 20.428}
 }
 
 # ==========================================
