@@ -1,12 +1,11 @@
-import yfinance as yf
-import pandas as pd
-import requests
 import os
+import time
+import requests
+import yfinance as yf
 
-TOKEN = os.getenv('TELEGRAM_TOKEN')
-CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-
-# 📊 你的專屬持倉名單 (記得改 shares 股數！)
+# ==========================================
+# 1. 用戶持倉設定 (已更新最新數據)
+# ==========================================
 PORTFOLIO = {
     '0005.HK': {'name': '匯豐控股', 'shares': 400, 'avg_price': 124.300},
     '1088.HK': {'name': '中國神華', 'shares': 500, 'avg_price': 43.900},
@@ -16,57 +15,122 @@ PORTFOLIO = {
     '3466.HK': {'name': '恒生高息股', 'shares': 2800, 'avg_price': 20.163}
 }
 
-def send_tg(msg):
-    if not msg.strip(): return
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {'chat_id': CHAT_ID, 'text': msg, 'parse_mode': 'Markdown'}
-    requests.post(url, data=payload)
+# ==========================================
+# 2. 獲取股價函數 (加入防封鎖邏輯)
+# ==========================================
+def get_current_price(symbol):
+    """
+    獲取股票現價，失敗時返回 None
+    """
+    try:
+        print(f"🔍 正在查詢: {symbol} ...")
+        ticker = yf.Ticker(symbol)
+        
+        # 嘗試獲取當日數據
+        # history(period="1d") 比 .info 更穩定且不易被封鎖
+        data = ticker.history(period="1d")
+        
+        if not data.empty:
+            price = data['Close'].iloc[-1]
+            return float(price)
+        else:
+            print(f"❌ {symbol} 數據為空")
+            return None
+            
+    except Exception as e:
+        print(f"⚠️ {symbol} 讀取錯誤: {e}")
+        return None
 
-def calculate_pnl():
-    report = "📊 *每日收市盈虧結算 (16:20)*\n"
-    report += "------------------------\n"
+# ==========================================
+# 3. 發送 Telegram 訊息函數
+# ==========================================
+def send_telegram_message(message):
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not token or not chat_id:
+        print("❌ 錯誤: 找不到 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID 環境變數")
+        return
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
     
-    total_daily_pnl = 0
-    total_overall_pnl = 0
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            print("✅ Telegram 訊息發送成功")
+        else:
+            print(f"❌ 發送失敗: {response.text}")
+    except Exception as e:
+        print(f"❌ 連線錯誤: {e}")
+
+# ==========================================
+# 4. 主程式邏輯
+# ==========================================
+def main():
+    print("🚀 開始執行盈虧結算...")
     
+    report_lines = []
+    report_lines.append("📊 *每日收市盈虧結算 (16:20)*")
+    report_lines.append("------------------------")
+
+    total_market_value = 0
+    total_cost_value = 0
+    
+    # 遍歷持倉
     for symbol, data in PORTFOLIO.items():
-        try:
-            hist = yf.Ticker(symbol).history(period="5d")
-            if len(hist) < 2: continue
+        name = data['name']
+        shares = data['shares']
+        avg_price = data['avg_price']
+        
+        # 🔥 關鍵：每查一隻股票，暫停 2 秒，防止被 Yahoo 封鎖
+        time.sleep(2)
+        
+        current_price = get_current_price(symbol)
+        
+        if current_price is not None:
+            # 計算數值
+            market_val = current_price * shares
+            cost_val = avg_price * shares
+            pnl = market_val - cost_val
+            pnl_percent = ((current_price - avg_price) / avg_price) * 100
             
-            today_close = float(hist['Close'].iloc[-1])
-            ytd_close = float(hist['Close'].iloc[-2])
+            # 累積總數
+            total_market_value += market_val
+            total_cost_value += cost_val
             
-            name = data['name']
-            buy_price = data['buy_price']
-            shares = data['shares']
+            # 判斷 Emoji
+            icon = "🟢" if pnl >= 0 else "🔴"
             
-            # 計算
-            daily_pnl = (today_close - ytd_close) * shares
-            overall_pnl = (today_close - buy_price) * shares
-            
-            total_daily_pnl += daily_pnl
-            total_overall_pnl += overall_pnl
-            
-            d_icon = "🟢" if daily_pnl >= 0 else "🔴"
-            o_icon = "🟢" if overall_pnl >= 0 else "🔴"
-            
-            report += f"*{name} ({symbol})*\n"
-            report += f"現價: `${today_close:.3f}` (成本: `${buy_price:.3f}`)\n"
-            report += f"今日: {d_icon} `${daily_pnl:,.1f}`\n"
-            report += f"累積: {o_icon} `${overall_pnl:,.1f}`\n\n"
-            
-        except Exception as e:
-            report += f"*{data['name']} ({symbol})* ⚠️ 數據讀取失敗\n\n"
+            # 加入報告行
+            report_lines.append(f"*{name}* ({symbol})")
+            report_lines.append(f"   現價: ${current_price:.2f} | 成本: ${avg_price:.2f}")
+            report_lines.append(f"   盈虧: {icon} *${pnl:+.1f}* ({pnl_percent:+.1f}%)")
+            report_lines.append("") # 空行分隔
+        else:
+            report_lines.append(f"*{name}* ({symbol}) ⚠️ 數據讀取失敗")
+            report_lines.append("")
 
-    report += "========================\n"
-    report += "💰 *大市總結算*\n"
-    td_icon = "🟢 賺" if total_daily_pnl >= 0 else "🔴 蝕"
-    to_icon = "🟢 賺" if total_overall_pnl >= 0 else "🔴 蝕"
-    report += f"今日總盈虧: {td_icon} `${total_daily_pnl:,.1f}`\n"
-    report += f"累積總盈虧: {to_icon} `${total_overall_pnl:,.1f}`\n"
+    # 計算總結
+    total_pnl = total_market_value - total_cost_value
+    total_pnl_percent = 0
+    if total_cost_value > 0:
+        total_pnl_percent = (total_pnl / total_cost_value) * 100
+        
+    total_icon = "🟢" if total_pnl >= 0 else "🔴"
+
+    report_lines.append("========================")
+    report_lines.append(f"💰 *大市總結算*")
+    report_lines.append(f"總盈虧: {total_icon} *${total_pnl:+.1f}* ({total_pnl_percent:+.2f}%)")
     
-    send_tg(report)
+    # 組合訊息並發送
+    final_message = "\n".join(report_lines)
+    send_telegram_message(final_message)
+    print("🎉 結算完成！")
 
 if __name__ == "__main__":
-    calculate_pnl()
+    main()
