@@ -4,7 +4,7 @@ import requests
 import yfinance as yf
 
 # ==========================================
-# 1. 用戶持倉設定 (已更新最新數據)
+# 1. 用戶持倉設定 (你的最新持倉)
 # ==========================================
 PORTFOLIO = {
     '0005.HK': {'name': '匯豐控股', 'shares': 400, 'avg_price': 124.300},
@@ -16,30 +16,34 @@ PORTFOLIO = {
 }
 
 # ==========================================
-# 2. 獲取股價函數 (加入防封鎖邏輯)
+# 2. 獲取數據函數 (包含現價 & 上日收市價)
 # ==========================================
-def get_current_price(symbol):
+def get_stock_data(symbol):
     """
-    獲取股票現價，失敗時返回 None
+    獲取股票 [現價, 上日收市價]，失敗時返回 None, None
     """
     try:
         print(f"🔍 正在查詢: {symbol} ...")
         ticker = yf.Ticker(symbol)
         
-        # 嘗試獲取當日數據
-        # history(period="1d") 比 .info 更穩定且不易被封鎖
-        data = ticker.history(period="1d")
+        # 獲取過去 5 日數據，確保有足夠數據找到「上日收市」
+        hist = ticker.history(period="5d")
         
-        if not data.empty:
-            price = data['Close'].iloc[-1]
-            return float(price)
+        if len(hist) >= 2:
+            current_price = float(hist['Close'].iloc[-1]) # 最新收市價
+            prev_close = float(hist['Close'].iloc[-2])    # 上日收市價
+            return current_price, prev_close
+        elif len(hist) == 1:
+            # 如果剛好得一日數據 (例如新上市或極少交易)，就當作無變動
+            current_price = float(hist['Close'].iloc[-1])
+            return current_price, current_price
         else:
-            print(f"❌ {symbol} 數據為空")
-            return None
+            print(f"❌ {symbol} 數據不足")
+            return None, None
             
     except Exception as e:
         print(f"⚠️ {symbol} 讀取錯誤: {e}")
-        return None
+        return None, None
 
 # ==========================================
 # 3. 發送 Telegram 訊息函數
@@ -49,7 +53,7 @@ def send_telegram_message(message):
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
     if not token or not chat_id:
-        print("❌ 錯誤: 找不到 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID 環境變數")
+        print("❌ 錯誤: 找不到 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID")
         return
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -75,11 +79,13 @@ def main():
     print("🚀 開始執行盈虧結算...")
     
     report_lines = []
-    report_lines.append("📊 *每日收市盈虧結算 (16:20)*")
+    report_lines.append("📊 *每日收市詳細結算 (16:20)*")
     report_lines.append("------------------------")
 
-    total_market_value = 0
-    total_cost_value = 0
+    # 累積變數
+    total_daily_pnl = 0   # 今日總盈虧
+    total_hold_pnl = 0    # 持倉總盈虧
+    total_cost = 0        # 總成本
     
     # 遍歷持倉
     for symbol, data in PORTFOLIO.items():
@@ -87,47 +93,53 @@ def main():
         shares = data['shares']
         avg_price = data['avg_price']
         
-        # 🔥 關鍵：每查一隻股票，暫停 2 秒，防止被 Yahoo 封鎖
+        # 🔥 防封鎖延遲
         time.sleep(2)
         
-        current_price = get_current_price(symbol)
+        price, prev_close = get_stock_data(symbol)
         
-        if current_price is not None:
-            # 計算數值
-            market_val = current_price * shares
-            cost_val = avg_price * shares
-            pnl = market_val - cost_val
-            pnl_percent = ((current_price - avg_price) / avg_price) * 100
+        if price is not None:
+            # 1. 計算今日盈虧 (Daily PnL)
+            daily_change = price - prev_close
+            daily_pnl = daily_change * shares
+            daily_pct = (daily_change / prev_close) * 100
             
-            # 累積總數
-            total_market_value += market_val
-            total_cost_value += cost_val
+            # 2. 計算總持倉盈虧 (Total PnL)
+            total_pnl = (price - avg_price) * shares
+            total_pct = ((price - avg_price) / avg_price) * 100
             
-            # 判斷 Emoji
-            icon = "🟢" if pnl >= 0 else "🔴"
+            # 3. 累積大數
+            total_daily_pnl += daily_pnl
+            total_hold_pnl += total_pnl
+            total_cost += (avg_price * shares)
             
-            # 加入報告行
+            # 4. 判斷 Emoji
+            d_icon = "🔺" if daily_pnl >= 0 else "🔻"
+            t_icon = "🟢" if total_pnl >= 0 else "🔴"
+            
+            # 5. 排版輸出
             report_lines.append(f"*{name}* ({symbol})")
-            report_lines.append(f"   現價: ${current_price:.2f} | 成本: ${avg_price:.2f}")
-            report_lines.append(f"   盈虧: {icon} *${pnl:+.1f}* ({pnl_percent:+.1f}%)")
-            report_lines.append("") # 空行分隔
+            report_lines.append(f"   現價: ${price:.2f}")
+            report_lines.append(f"   📅 今日: {d_icon} *${daily_pnl:+.1f}* ({daily_pct:+.2f}%)")
+            report_lines.append(f"   💰 總計: {t_icon} *${total_pnl:+.1f}* ({total_pct:+.1f}%)")
+            report_lines.append("") # 空行
         else:
             report_lines.append(f"*{name}* ({symbol}) ⚠️ 數據讀取失敗")
             report_lines.append("")
 
-    # 計算總結
-    total_pnl = total_market_value - total_cost_value
-    total_pnl_percent = 0
-    if total_cost_value > 0:
-        total_pnl_percent = (total_pnl / total_cost_value) * 100
-        
-    total_icon = "🟢" if total_pnl >= 0 else "🔴"
+    # 計算大市總結
+    total_daily_icon = "🟢" if total_daily_pnl >= 0 else "🔴"
+    total_hold_icon = "🟢" if total_hold_pnl >= 0 else "🔴"
+    
+    hold_pct = 0
+    if total_cost > 0:
+        hold_pct = (total_hold_pnl / total_cost) * 100
 
     report_lines.append("========================")
-    report_lines.append(f"💰 *大市總結算*")
-    report_lines.append(f"總盈虧: {total_icon} *${total_pnl:+.1f}* ({total_pnl_percent:+.2f}%)")
+    report_lines.append(f"📅 *今日總盈虧*: {total_daily_icon} *${total_daily_pnl:+.1f}*")
+    report_lines.append(f"💰 *總持倉盈虧*: {total_hold_icon} *${total_hold_pnl:+.1f}* ({hold_pct:+.2f}%)")
     
-    # 組合訊息並發送
+    # 發送
     final_message = "\n".join(report_lines)
     send_telegram_message(final_message)
     print("🎉 結算完成！")
