@@ -4,14 +4,15 @@ import requests
 import yfinance as yf
 
 # ==========================================
-# 1. 用戶持倉設定 (你的最新持倉)
+# 1. 用戶持倉設定 (最新持倉)
 # ==========================================
 PORTFOLIO = {
-    '0005.HK': {'name': '匯豐控股', 'shares': 400, 'avg_price': 124.300},
-    '1088.HK': {'name': '中國神華', 'shares': 500, 'avg_price': 43.900},
-    '3070.HK': {'name': '平安香港高息', 'shares': 1100, 'avg_price': 40.078},
-    '3081.HK': {'name': '價值黃金ETF', 'shares': 1100, 'avg_price': 23.625},
-    '3466.HK': {'name': '恒生高息股', 'shares': 3200, 'avg_price': 20.428}
+    '3466.HK': {'name': '恒生高息股', 'shares': 4400, 'avg_price': 20.775},
+    '3070.HK': {'name': '平安香港高息', 'shares': 2100, 'avg_price': 41.387},
+    '0005.HK': {'name': '滙豐控股', 'shares': 400, 'avg_price': 124.300},
+    '3081.HK': {'name': '價值黃金 ETF', 'shares': 2100, 'avg_price': 22.947},
+    '0939.HK': {'name': '建設銀行', 'shares': 5000, 'avg_price': 8.920},
+    '6823.HK': {'name': '香港電訊', 'shares': 3000, 'avg_price': 12.630}
 }
 
 # ==========================================
@@ -118,7 +119,7 @@ def main():
             
             # 5. 排版輸出
             report_lines.append(f"*{name}* ({symbol})")
-            report_lines.append(f"   現價: ${price:.2f}")
+            report_lines.append(f"   現價: ${price:.3f}")
             report_lines.append(f"   📅 今日: {d_icon} *${daily_pnl:+.1f}* ({daily_pct:+.2f}%)")
             report_lines.append(f"   💰 總計: {t_icon} *${total_pnl:+.1f}* ({total_pct:+.1f}%)")
             report_lines.append("") # 空行
