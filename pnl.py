@@ -7,12 +7,13 @@ import yfinance as yf
 # 1. 用戶持倉設定 (最新持倉)
 # ==========================================
 PORTFOLIO = {
+    '3070.HK': {'name': '平安香港高息', 'shares': 2300, 'avg_price': 41.494},
     '3466.HK': {'name': '恒生高息股', 'shares': 4400, 'avg_price': 20.775},
-    '3070.HK': {'name': '平安香港高息', 'shares': 2100, 'avg_price': 41.387},
     '0005.HK': {'name': '滙豐控股', 'shares': 400, 'avg_price': 124.300},
-    '3081.HK': {'name': '價值黃金 ETF', 'shares': 2100, 'avg_price': 22.947},
+    '3750.HK': {'name': '寧德時代', 'shares': 100, 'avg_price': 705.000},
     '0939.HK': {'name': '建設銀行', 'shares': 5000, 'avg_price': 8.920},
-    '6823.HK': {'name': '香港電訊', 'shares': 3000, 'avg_price': 12.630}
+    '6823.HK': {'name': '香港電訊', 'shares': 3000, 'avg_price': 12.630},
+    '1810.HK': {'name': '小米集團', 'shares': 800, 'avg_price': 22.100}
 }
 
 # ==========================================
