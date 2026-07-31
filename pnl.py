@@ -4,20 +4,16 @@ import requests
 import yfinance as yf
 
 # ==========================================
-# 1. 用戶持倉設定 (需包含股數同平均價)
+# 1. 用戶持倉設定 (已根據圖片最新數據更新)
 # ==========================================
 PORTFOLIO = {
-    '1810.HK': {'name': '小米集團-W', 'shares': 1000, 'avg_price': 15.2},
-    '0005.HK': {'name': '匯豐控股',   'shares': 400,  'avg_price': 62.0},
-    '3750.HK': {'name': '寧德時代',   'shares': 200,  'avg_price': 180.0},
-    '2561.HK': {'name': '維昇藥業',   'shares': 500,  'avg_price': 10.0},
-    '2050.HK': {'name': '三花智控',   'shares': 300,  'avg_price': 22.0},
-    '0823.HK': {'name': '領展房產基金', 'shares': 500,  'avg_price': 38.5},
-    '0883.HK': {'name': '中國海油',   'shares': 2000, 'avg_price': 17.5},
-    '3690.HK': {'name': '美團-W',     'shares': 300,  'avg_price': 110.0},
-    '9988.HK': {'name': '阿里巴巴-W', 'shares': 500,  'avg_price': 75.0},
-    '6823.HK': {'name': '香港電訊',   'shares': 1000, 'avg_price': 9.8},
-    '0939.HK': {'name': '建設銀行',   'shares': 5000, 'avg_price': 4.8},
+    '3070.HK': {'name': '平安香港高息', 'shares': 2300, 'avg_price': 41.494},
+    '3466.HK': {'name': '恒生高息股',   'shares': 4400, 'avg_price': 20.775},
+    '0005.HK': {'name': '滙豐控股',     'shares': 400,  'avg_price': 124.300},
+    '3750.HK': {'name': '寧德時代',     'shares': 100,  'avg_price': 705.000},
+    '0939.HK': {'name': '建設銀行',     'shares': 5000, 'avg_price': 8.920},
+    '6823.HK': {'name': '香港電訊',     'shares': 3000, 'avg_price': 12.630},
+    '1810.HK': {'name': '小米集團-W',   'shares': 800,  'avg_price': 22.100},
 }
 
 # ==========================================
@@ -50,7 +46,7 @@ def get_stock_data(symbol):
         return None, None
 
 # ==========================================
-# 3. 發送 Telegram 訊息函數 (改用 HTML 避免 Markdown 解析失敗)
+# 3. 發送 Telegram 訊息函數 (使用 HTML 格式)
 # ==========================================
 def send_telegram_message(message):
     token = os.environ.get("TELEGRAM_TOKEN")
