@@ -1,27 +1,11 @@
-已經根據你提供的圖片，為你更新了 `PORTFOLIO` 內的持倉數量和平均買入價。
-
-主要更新了以下三隻股票的數據：
-
-* **小米集團-W (1810.HK)**：數量更新為 3600，平均買入價更新為 25.180
-
-
-* **恒生高息股 (3466.HK)**：數量更新為 5200，平均買入價更新為 20.689
-
-
-* **寧德時代 (3750.HK)**：數量更新為 200，平均買入價更新為 593.500
-
-
-
-以下是更新後的完整代碼，你可以直接複製使用：
-
-```python
 import os
 import time
 import requests
+from datetime import datetime
 import yfinance as yf
 
 # ==========================================
-# 1. 用戶持倉設定 (已根據圖片最新數據更新)
+# 1. 用戶持倉設定
 # ==========================================
 PORTFOLIO = {
     '3070.HK': {'name': '平安香港高息', 'shares': 2300, 'avg_price': 41.494},
@@ -33,37 +17,41 @@ PORTFOLIO = {
     '1810.HK': {'name': '小米集團-W',   'shares': 3600, 'avg_price': 25.180},
 }
 
-# ==========================================
-# 2. 獲取數據函數
-# ==========================================
-def get_stock_data(symbol):
-    """
-    獲取股票 [現價, 上日收市價]，失敗時返回 None, None
-    """
-    try:
-        print(f"🔍 正在查詢: {symbol} ...")
-        ticker = yf.Ticker(symbol)
-        
-        # 獲取過去 5 日數據
-        hist = ticker.history(period="5d")
-        
-        if len(hist) >= 2:
-            current_price = float(hist['Close'].iloc[-1])
-            prev_close = float(hist['Close'].iloc[-2])
-            return current_price, prev_close
-        elif len(hist) == 1:
-            current_price = float(hist['Close'].iloc[-1])
-            return current_price, current_price
-        else:
-            print(f"❌ {symbol} 數據不足")
-            return None, None
-            
-    except Exception as e:
-        print(f"⚠️ {symbol} 讀取錯誤: {e}")
-        return None, None
+# 設定 Session 偽裝瀏覽器，降低被 Yahoo Finance 封鎖的機率 (GitHub Actions 常見問題)
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+})
 
 # ==========================================
-# 3. 發送 Telegram 訊息函數 (使用 HTML 格式)
+# 2. 獲取數據函數 (加入重試機制)
+# ==========================================
+def get_stock_data(symbol, retries=3):
+    for attempt in range(retries):
+        try:
+            print(f"🔍 正在查詢: {symbol} (嘗試 {attempt + 1}/{retries})...")
+            ticker = yf.Ticker(symbol, session=session)
+            hist = ticker.history(period="5d")
+            
+            if len(hist) >= 2:
+                current_price = float(hist['Close'].iloc[-1])
+                prev_close = float(hist['Close'].iloc[-2])
+                return current_price, prev_close
+            elif len(hist) == 1:
+                current_price = float(hist['Close'].iloc[-1])
+                return current_price, current_price
+            else:
+                print(f"❌ {symbol} 數據不足")
+                
+        except Exception as e:
+            print(f"⚠️ {symbol} 讀取錯誤: {e}")
+            
+        time.sleep(2)  # 失敗後等待 2 秒再試
+        
+    return None, None
+
+# ==========================================
+# 3. 發送 Telegram 訊息函數
 # ==========================================
 def send_telegram_message(message):
     token = os.environ.get("TELEGRAM_TOKEN")
@@ -93,6 +81,11 @@ def send_telegram_message(message):
 # 4. 主程式邏輯
 # ==========================================
 def main():
+    # 週末防呆：如果是星期六 (5) 或星期日 (6)，直接停止執行
+    if datetime.today().weekday() >= 5:
+        print("⏸️ 今日是週末，股市休市，停止結算。")
+        return
+
     print("🚀 開始執行盈虧結算...")
     
     report_lines = []
@@ -108,19 +101,17 @@ def main():
         shares = data['shares']
         avg_price = data['avg_price']
         
-        time.sleep(1) # 防封鎖延遲
-        
         price, prev_close = get_stock_data(symbol)
         
         if price is not None:
-            # 1. 計算今日盈虧
+            # 1. 計算今日盈虧 (加入防禦除以零)
             daily_change = price - prev_close
             daily_pnl = daily_change * shares
-            daily_pct = (daily_change / prev_close) * 100 if prev_close else 0
+            daily_pct = (daily_change / prev_close) * 100 if prev_close > 0 else 0
             
             # 2. 計算總持倉盈虧
             total_pnl = (price - avg_price) * shares
-            total_pct = ((price - avg_price) / avg_price) * 100 if avg_price else 0
+            total_pct = ((price - avg_price) / avg_price) * 100 if avg_price > 0 else 0
             
             # 3. 累積總額
             total_daily_pnl += daily_pnl
@@ -131,30 +122,4 @@ def main():
             d_icon = "🔺" if daily_pnl >= 0 else "🔻"
             t_icon = "🟢" if total_pnl >= 0 else "🔴"
             
-            # 5. 組裝內文 (HTML 格式)
-            report_lines.append(f"<b>{name}</b> ({symbol})")
-            report_lines.append(f"   現價: ${price:.3f}")
-            report_lines.append(f"   📅 今日: {d_icon} <b>${daily_pnl:+.1f}</b> ({daily_pct:+.2f}%)")
-            report_lines.append(f"   💰 總計: {t_icon} <b>${total_pnl:+.1f}</b> ({total_pct:+.1f}%)")
-            report_lines.append("")
-        else:
-            report_lines.append(f"<b>{name}</b> ({symbol}) ⚠️ 數據讀取失敗\n")
-
-    # 總結計算
-    total_daily_icon = "🟢" if total_daily_pnl >= 0 else "🔴"
-    total_hold_icon = "🟢" if total_hold_pnl >= 0 else "🔴"
-    
-    hold_pct = (total_hold_pnl / total_cost) * 100 if total_cost > 0 else 0
-
-    report_lines.append("========================")
-    report_lines.append(f"📅 <b>今日總盈虧</b>: {total_daily_icon} <b>${total_daily_pnl:+.1f}</b>")
-    report_lines.append(f"💰 <b>總持倉盈虧</b>: {total_hold_icon} <b>${total_hold_pnl:+.1f}</b> ({hold_pct:+.2f}%)")
-    
-    final_message = "\n".join(report_lines)
-    send_telegram_message(final_message)
-    print("🎉 結算完成！")
-
-if __name__ == "__main__":
-    main()
-
-```
+            # 5.
